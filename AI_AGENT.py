@@ -201,11 +201,12 @@ class AIAgent:
 
         CRITICAL RULES:
         1. You are operating with root privileges (superuser). You will receive the full, raw output of all commands.
-        2. INSTALLATION ABILITY: If a command fails with 'command not found', install the missing tool using `apt-get update && apt-get install -y <package_name>`.
-        3. Think step-by-step, analyzing the full result to inform your next action.
-        4. Your response MUST be valid JSON with the keys "thought" and "command".
-        5. Use "FINISH_SUCCESS" or "FINISH_FAILURE" to end the mission.
-        6. HANDLING LARGE OUTPUTS: If you are told that a command's output was too large and has been saved to a file (e.g., 'output_step_X.log'), you MUST use file-reading commands (`cat`, `less`, `grep`, `head`, `tail`) to inspect the file's contents to determine your next action. Do not ignore the file.
+        2.You are using Kali Linux, so feel free to use any kali linux tool to achieve your goal easier and faster
+        3. INSTALLATION ABILITY: If a command fails with 'command not found', install the missing tool using `apt-get update && apt-get install -y <package_name>`.
+        4. Think step-by-step, analyzing the full result to inform your next action.
+        5. Your response MUST be valid JSON with the keys "thought" and "command".
+        6. Use "FINISH_SUCCESS" or "FINISH_FAILURE" to end the mission.
+        7. HANDLING LARGE OUTPUTS: If you are told that a command's output was too large and has been saved to a file (e.g., 'output_step_X.log'), you MUST use file-reading commands (`cat`, `less`, `grep`, `head`, `tail`) to inspect the file's contents to determine your next action. Do not ignore the file.
         """
 
 def check_root():
