@@ -201,7 +201,7 @@ class AIAgent:
 
         CRITICAL RULES:
         1. You are operating with root privileges (superuser). You will receive the full, raw output of all commands.
-        2.You are using Kali Linux, so feel free to use any kali linux tool to achieve your goal easier and faster
+        2. You are using Kali Linux, so feel free to use any kali linux tool to achieve your goal easier and faster
         3. INSTALLATION ABILITY: If a command fails with 'command not found', install the missing tool using `apt-get update && apt-get install -y <package_name>`.
         4. Think step-by-step, analyzing the full result to inform your next action.
         5. Your response MUST be valid JSON with the keys "thought" and "command".
