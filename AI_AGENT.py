@@ -19,8 +19,9 @@ class Colors:
     DIM = '\033[2m'
 
 # --- Configuration ---
-MODEL_NAME = "anthropic/claude-3.7-sonnet"
+MODEL_NAME = "deepseek/deepseek-chat-v3.1"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+MAX_OUTPUT_LENGTH = 30000
 
 class AIAgent:
     """
@@ -50,7 +51,15 @@ class AIAgent:
         if not command: return "Error: No command to execute."
         print(f"\n{Colors.BOLD}{Colors.YELLOW}[>>] EXECUTING AS ROOT:{Colors.RESET} {command}")
         try:
-            process = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='ignore')
+            process = subprocess.run(
+                command, 
+                shell=True, 
+                capture_output=True, 
+                text=True, 
+                timeout=timeout, 
+                encoding='utf-8', 
+                errors='ignore'
+            )
             return process.stdout + process.stderr
         except subprocess.TimeoutExpired:
             return f"Error: The command timed out after {timeout} seconds."
@@ -68,26 +77,37 @@ class AIAgent:
                 response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=180)
                 response.raise_for_status()
                 return response.json()['choices'][0]['message']['content']
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 400:
+                    print(f"{Colors.RED}[!] Error: 400 Bad Request. The API request was likely too large or malformed.{Colors.RESET}")
+                    print(f"{Colors.DIM}Response body: {e.response.text[:500]}...{Colors.RESET}")
+                    return f'{{"thought": "The previous API request failed with a 400 error, likely because the context was too large. I need to proceed with a different approach, perhaps by summarizing previous findings or trying a less verbose command.", "command": "echo \'API request failed, retrying with a different strategy.\'"}}'
+                print(f"{Colors.YELLOW}[!] Warning: API connection failed (attempt {attempt + 1}/{max_retries}): {e}{Colors.RESET}")
             except requests.exceptions.RequestException as e:
                 print(f"{Colors.YELLOW}[!] Warning: API connection failed (attempt {attempt + 1}/{max_retries}): {e}{Colors.RESET}")
-                if attempt < max_retries - 1:
-                    wait_time = backoff_factor * (attempt + 1)
-                    print(f"{Colors.CYAN}[*] Retrying in {wait_time} seconds...{Colors.RESET}")
-                    time.sleep(wait_time)
-                else:
-                    print(f"{Colors.RED}[!] Error: Maximum connection retries reached.{Colors.RESET}")
-                    return f'{{"thought": "Critical API connection error. Check internet/DNS.", "command": "FINISH_FAILURE"}}'
+
+            if attempt < max_retries - 1:
+                wait_time = backoff_factor * (attempt + 1)
+                print(f"{Colors.CYAN}[*] Retrying in {wait_time} seconds...{Colors.RESET}")
+                time.sleep(wait_time)
+            else:
+                print(f"{Colors.RED}[!] Error: Maximum connection retries reached.{Colors.RESET}")
+                return f'{{"thought": "Critical API connection error. Check internet/DNS.", "command": "FINISH_FAILURE"}}'
         return f'{{"thought": "Unexpected failure in API retry loop.", "command": "FINISH_FAILURE"}}'
+
 
     @staticmethod
     def parse_llm_response(response_text):
         try:
             if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif response_text.strip().startswith("```"):
+                 response_text = response_text.strip()[3:-3].strip()
+
             return json.loads(response_text)
         except (json.JSONDecodeError, IndexError) as e:
             print(f"{Colors.RED}[!] Error decoding JSON: {e}\n[!] Received response: {response_text}{Colors.RESET}")
-            return {"thought": "The AI's response was not valid JSON.", "command": "echo 'AI response has invalid format.'"}
+            return {"thought": "The AI's response was not valid JSON. I will try again, ensuring my output is perfectly formatted.", "command": "echo 'AI response has invalid format.'"}
 
     def run_mission(self):
         print(f"\n{Colors.BOLD}{Colors.CYAN}--- STARTING MISSION ---{Colors.RESET}")
@@ -101,27 +121,44 @@ class AIAgent:
         while True:
             print(f"\n{Colors.BOLD}{Colors.MAGENTA}--- STEP {step} ---{Colors.RESET}")
             print(f"{Colors.CYAN}[*] Thinking...{Colors.RESET}")
+            
             llm_response_text = self.call_llm(messages)
             action = self.parse_llm_response(llm_response_text)
             
             thought = action.get("thought", "No thought recorded.")
             command = action.get("command", "")
             print(f"{Colors.GREEN}{Colors.BOLD}[+] THOUGHT:{Colors.RESET}{Colors.GREEN} {thought}{Colors.RESET}")
-
-            self.history.append({"step": step, "thought": thought, "command": command, "result": ""})
             
+            current_history = {"step": step, "thought": thought, "command": command, "result": "", "result_summary": ""}
+            self.history.append(current_history)
+
             if command in ["FINISH_SUCCESS", "FINISH_FAILURE"]:
                 status_color = Colors.GREEN if command == "FINISH_SUCCESS" else Colors.RED
                 print(f"\n{Colors.BOLD}{status_color}--- MISSION COMPLETE --- \nFinal Status: {command}{Colors.RESET}")
                 break
             
             result = self.execute_command(command)
-            print(f"{Colors.BLUE}{Colors.BOLD}[<<] FULL RESULT SENT TO AI ({len(result)} characters):{Colors.RESET}")
+            
+            if len(result) > MAX_OUTPUT_LENGTH:
+                filename = f"output_step_{step}.log"
+                with open(filename, "w", encoding='utf-8', errors='ignore') as f:
+                    f.write(result)
+                
+                print(f"{Colors.BLUE}{Colors.BOLD}[<<] RESULT IS TOO LARGE ({len(result)} chars). Saved to '{filename}'. Informing AI.{Colors.RESET}")
+                
+                user_feedback = (f"The command output was too large to display directly. "
+                                 f"It has been saved to the file '{filename}'.\n"
+                                 f"You MUST analyze this file using file-reading commands (like 'head', 'tail', 'grep', 'cat') "
+                                 f"to find the relevant information and decide your next step.")
 
-            self.history[-1]["result"] = result
+                current_history["result_summary"] = f"Output too large, saved to {filename}"
+            else:
+                print(f"{Colors.BLUE}{Colors.BOLD}[<<] FULL RESULT SENT TO AI ({len(result)} characters):{Colors.RESET}")
+                user_feedback = f"The result of your last command was:\n---\n{result}\n---\nBased on this full result, what is your next step?"
+                current_history["result"] = result
 
             messages.append({"role": "assistant", "content": json.dumps(action)})
-            messages.append({"role": "user", "content": f"The result of your last command was:\n---\n{result}\n---\nBased on this full result, what is your next step?"})
+            messages.append({"role": "user", "content": user_feedback})
             
             step += 1
 
@@ -131,10 +168,7 @@ class AIAgent:
         print("\n\n" + f"{Colors.BOLD}{Colors.CYAN}" + "="*80 + "\nFINAL MISSION REPORT - AI AGENT\n" + "="*80 + f"{Colors.RESET}")
         last_status = self.history[-1]['command']
         
-        if last_status == "FINISH_SUCCESS":
-            result_status = f"{Colors.GREEN}SUCCESS{Colors.RESET}"
-        else:
-            result_status = f"{Colors.RED}FAILURE{Colors.RESET}"
+        result_status = f"{Colors.GREEN}SUCCESS{Colors.RESET}" if last_status == "FINISH_SUCCESS" else f"{Colors.RED}FAILURE{Colors.RESET}"
             
         print(f"{Colors.BOLD}**Target:**{Colors.RESET} {self.target}\n{Colors.BOLD}**Objective:**{Colors.RESET} {self.objective}\n{Colors.BOLD}**Final Result:**{Colors.RESET} {result_status}\n" + "-" * 80)
         print(f"\n{Colors.BOLD}**Execution Summary (Log):**{Colors.RESET}\n")
@@ -144,13 +178,19 @@ class AIAgent:
             print(f"  - {Colors.GREEN}Thought:{Colors.RESET} {record['thought']}")
             print(f"  - {Colors.YELLOW}Command:{Colors.RESET} {record['command']}")
             if record['command'] not in ["FINISH_SUCCESS", "FINISH_FAILURE"]:
-                result_preview = record['result'].strip().replace('\n', ' ')[:150]
-                print(f"  - {Colors.DIM}Result (preview):{Colors.RESET} {result_preview}...")
+                if record['result_summary']:
+                     print(f"  - {Colors.DIM}Result:{Colors.RESET} {record['result_summary']}")
+                else:
+                    result_preview = record['result'].strip().replace('\n', ' ')[:150]
+                    print(f"  - {Colors.DIM}Result (preview):{Colors.RESET} {result_preview}...")
             print(f"{Colors.DIM}" + "-" * 20 + f"{Colors.RESET}")
             
         if last_status == "FINISH_SUCCESS" and len(self.history) > 1:
             print(f"\n{Colors.BOLD}**Proof of Concept (Evidence):**{Colors.RESET}\n")
             final_evidence = self.history[-2]['result']
+            if not final_evidence and self.history[-2]['result_summary']:
+                 final_evidence = f"Evidence is located in the file: {self.history[-2]['result_summary'].split(' ')[-1]}"
+
             print(f"{Colors.GREEN}```\n" + final_evidence.strip() + f"\n```{Colors.RESET}")
         
         print("\n" + f"{Colors.BOLD}{Colors.CYAN}" + "="*80 + "\nEND OF REPORT\n" + "="*80 + f"{Colors.RESET}")
@@ -165,6 +205,7 @@ class AIAgent:
         3. Think step-by-step, analyzing the full result to inform your next action.
         4. Your response MUST be valid JSON with the keys "thought" and "command".
         5. Use "FINISH_SUCCESS" or "FINISH_FAILURE" to end the mission.
+        6. HANDLING LARGE OUTPUTS: If you are told that a command's output was too large and has been saved to a file (e.g., 'output_step_X.log'), you MUST use file-reading commands (`cat`, `less`, `grep`, `head`, `tail`) to inspect the file's contents to determine your next action. Do not ignore the file.
         """
 
 def check_root():
