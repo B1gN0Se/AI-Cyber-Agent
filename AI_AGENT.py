@@ -117,7 +117,6 @@ class AIAgent:
             
             result = self.execute_command(command)
             print(f"{Colors.BLUE}{Colors.BOLD}[<<] FULL RESULT SENT TO AI ({len(result)} characters):{Colors.RESET}")
-            print(f"{Colors.DIM}{result.strip()[:1000]}...{Colors.RESET}") # Shows a preview in dim color
 
             self.history[-1]["result"] = result
 
