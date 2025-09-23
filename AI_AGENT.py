@@ -19,7 +19,7 @@ class Colors:
     DIM = '\033[2m'
 
 # --- Configuration ---
-MODEL_NAME = "deepseek/deepseek-chat-v3.1"
+MODEL_NAME = "anthropic/claude-3.7-sonnet"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 class AIAgent:
