@@ -19,7 +19,7 @@ class Colors:
     DIM = '\033[2m'
 
 # --- Configuration ---
-MODEL_NAME = "deepseek/deepseek-chat-v3.1"
+MODEL_NAME = "anthropic/claude-3.7-sonnet"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_OUTPUT_LENGTH = 30000
 
@@ -76,7 +76,13 @@ class AIAgent:
             try:
                 response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=180)
                 response.raise_for_status()
-                return response.json()['choices'][0]['message']['content']
+                content = response.json()['choices'][0]['message']['content']
+                # Remove markdown wrappers from JSON responses
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif content.strip().startswith("```") and content.strip().endswith("```"):
+                     content = content.strip()[3:-3].strip()
+                return content
             except requests.exceptions.HTTPError as e:
                 if e.response.status_code == 400:
                     print(f"{Colors.RED}[!] Error: 400 Bad Request. The API request was likely too large or malformed.{Colors.RESET}")
@@ -99,11 +105,6 @@ class AIAgent:
     @staticmethod
     def parse_llm_response(response_text):
         try:
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif response_text.strip().startswith("```"):
-                 response_text = response_text.strip()[3:-3].strip()
-
             return json.loads(response_text)
         except (json.JSONDecodeError, IndexError) as e:
             print(f"{Colors.RED}[!] Error decoding JSON: {e}\n[!] Received response: {response_text}{Colors.RESET}")
@@ -138,7 +139,8 @@ class AIAgent:
                 break
             
             result = self.execute_command(command)
-            
+            current_history["result"] = result
+
             if len(result) > MAX_OUTPUT_LENGTH:
                 filename = f"output_step_{step}.log"
                 with open(filename, "w", encoding='utf-8', errors='ignore') as f:
@@ -150,12 +152,10 @@ class AIAgent:
                                  f"It has been saved to the file '{filename}'.\n"
                                  f"You MUST analyze this file using file-reading commands (like 'head', 'tail', 'grep', 'cat') "
                                  f"to find the relevant information and decide your next step.")
-
                 current_history["result_summary"] = f"Output too large, saved to {filename}"
             else:
                 print(f"{Colors.BLUE}{Colors.BOLD}[<<] FULL RESULT SENT TO AI ({len(result)} characters):{Colors.RESET}")
                 user_feedback = f"The result of your last command was:\n---\n{result}\n---\nBased on this full result, what is your next step?"
-                current_history["result"] = result
 
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append({"role": "user", "content": user_feedback})
@@ -164,34 +164,95 @@ class AIAgent:
 
         self.generate_report()
     
-    def generate_report(self):
-        print("\n\n" + f"{Colors.BOLD}{Colors.CYAN}" + "="*80 + "\nFINAL MISSION REPORT - AI AGENT\n" + "="*80 + f"{Colors.RESET}")
-        last_status = self.history[-1]['command']
-        
-        result_status = f"{Colors.GREEN}SUCCESS{Colors.RESET}" if last_status == "FINISH_SUCCESS" else f"{Colors.RED}FAILURE{Colors.RESET}"
-            
-        print(f"{Colors.BOLD}**Target:**{Colors.RESET} {self.target}\n{Colors.BOLD}**Objective:**{Colors.RESET} {self.objective}\n{Colors.BOLD}**Final Result:**{Colors.RESET} {result_status}\n" + "-" * 80)
-        print(f"\n{Colors.BOLD}**Execution Summary (Log):**{Colors.RESET}\n")
-        
+    def _summarize_history_for_report(self):
+        """Formats the mission history into a text string for the AI."""
+        summary = []
         for record in self.history:
-            print(f"{Colors.MAGENTA}--- Step {record['step']} ---{Colors.RESET}")
-            print(f"  - {Colors.GREEN}Thought:{Colors.RESET} {record['thought']}")
-            print(f"  - {Colors.YELLOW}Command:{Colors.RESET} {record['command']}")
-            if record['command'] not in ["FINISH_SUCCESS", "FINISH_FAILURE"]:
-                if record['result_summary']:
-                     print(f"  - {Colors.DIM}Result:{Colors.RESET} {record['result_summary']}")
-                else:
-                    result_preview = record['result'].strip().replace('\n', ' ')[:150]
-                    print(f"  - {Colors.DIM}Result (preview):{Colors.RESET} {result_preview}...")
-            print(f"{Colors.DIM}" + "-" * 20 + f"{Colors.RESET}")
-            
-        if last_status == "FINISH_SUCCESS" and len(self.history) > 1:
-            print(f"\n{Colors.BOLD}**Proof of Concept (Evidence):**{Colors.RESET}\n")
-            final_evidence = self.history[-2]['result']
-            if not final_evidence and self.history[-2]['result_summary']:
-                 final_evidence = f"Evidence is located in the file: {self.history[-2]['result_summary'].split(' ')[-1]}"
+            command = record['command']
+            if command in ["FINISH_SUCCESS", "FINISH_FAILURE"]:
+                summary.append(f"Step {record['step']}: Mission finished with status: {command}.")
+                continue
 
-            print(f"{Colors.GREEN}```\n" + final_evidence.strip() + f"\n```{Colors.RESET}")
+            thought = record['thought']
+            summary.append(f"Step {record['step']}:\n- Thought: {thought}\n- Command Executed: {command}")
+        return "\n".join(summary)
+
+    def generate_report(self):
+        print("\n\n" + f"{Colors.BOLD}{Colors.CYAN}" + "="*80 + "\nGenerating Final Narrative Report...\n" + "="*80 + f"{Colors.RESET}")
+        
+        # Only generate a detailed report if the mission was a success and had steps
+        if not self.history or self.history[-1]['command'] != "FINISH_SUCCESS" or len(self.history) < 2:
+            last_status = self.history[-1]['command'] if self.history else "UNKNOWN"
+            result_status = f"{Colors.RED}FAILURE ({last_status}){Colors.RESET}"
+            print(f"{Colors.BOLD}**Target:**{Colors.RESET} {self.target}")
+            print(f"{Colors.BOLD}**Objective:**{Colors.RESET} {self.objective}")
+            print(f"{Colors.BOLD}**Final Result:**{Colors.RESET} {result_status}")
+            print(f"{Colors.YELLOW}Mission did not complete successfully. Skipping narrative report.{Colors.RESET}")
+            return
+
+        mission_log = self._summarize_history_for_report()
+        
+        # The Proof of Concept (PoC) is the result of the penultimate step
+        final_evidence = self.history[-2].get('result', 'No direct evidence captured.').strip()
+        if not final_evidence and self.history[-2].get('result_summary'):
+             final_evidence = f"Evidence is located in the file: {self.history[-2]['result_summary'].split(' ')[-1]}"
+
+        # Create the prompt for the AI to generate the final report, requiring Markdown format
+        report_prompt = f"""
+        You are a senior penetration tester summarizing the results of an engagement.
+        Based on the following mission log and final evidence, write a final report for the client.
+
+        The report must be clear, concise, and professional. You MUST strictly follow the Markdown formatting rules below:
+        - The main title MUST start with a single hashtag (e.g., `# Penetration Test Report`).
+        - Each section title MUST start with two hashtags (e.g., `## Executive Summary`).
+        - The two required section titles are EXACTLY: `## Executive Summary` and `## Proof of Concept (PoC)`.
+        - The evidence in the PoC section MUST be enclosed in a single fenced code block (using ```).
+
+        **Mission Details:**
+        - **Target:** {self.target}
+        - **Objective:** {self.objective}
+
+        **Execution Log (for your context only):**
+        ---
+        {mission_log}
+        ---
+
+        **Final Proof of Concept (PoC) Data:**
+        ---
+        {final_evidence}
+        ---
+
+        Now, generate the final report based on these instructions.
+        """
+        
+        messages = [{"role": "user", "content": report_prompt}]
+        
+        print(f"{Colors.CYAN}[*] Asking AI to synthesize the final report... This may take a moment.{Colors.RESET}")
+        
+        # Call the AI to generate the report in Markdown format
+        narrative_report = self.call_llm(messages)
+        
+        # Print the generated report, applying colors based on formatting
+        print("\n" + f"{Colors.BOLD}{Colors.GREEN}" + "="*80 + "\nFINAL MISSION REPORT\n" + "="*80 + f"{Colors.RESET}")
+        
+        in_code_block = False
+        for line in narrative_report.splitlines():
+            # Check for the start/end of a code block
+            if line.strip().startswith('```'):
+                in_code_block = not in_code_block
+                print(f"{Colors.DIM}{line}{Colors.RESET}") # Print the ``` in dim
+            elif in_code_block:
+                # Lines inside the code block (PoC) are green
+                print(f"{Colors.GREEN}{line}{Colors.RESET}")
+            elif line.startswith('# '):
+                # Main title in Bold Cyan
+                print(f"{Colors.BOLD}{Colors.CYAN}{line}{Colors.RESET}")
+            elif line.startswith('## '):
+                # Section titles in Bold Yellow
+                print(f"{Colors.BOLD}{Colors.YELLOW}{line}{Colors.RESET}")
+            else:
+                # Normal text (no special color)
+                print(line)
         
         print("\n" + f"{Colors.BOLD}{Colors.CYAN}" + "="*80 + "\nEND OF REPORT\n" + "="*80 + f"{Colors.RESET}")
 
