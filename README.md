@@ -1,6 +1,6 @@
 # AI-Cyber-Agent
 
-This is an experimental, autonomous AI agent designed for cybersecurity tasks. It leverages the reasoning capabilities of Large Language Models (LLMs) like DeepSeek via the **OpenRouter API** to automate penetration testing workflows. The agent operates directly on your command line, making decisions and executing tools to achieve a given objective.
+This is an experimental, autonomous AI agent designed for cybersecurity tasks. Its core feature is a flexible Large Language Model (LLM) integration, supporting both the diverse models available through the **OpenRouter API** (like DeepSeek) and self-hosted local LLMs for offline and privacy-focused operations (**Ollama**). The agent leverages the reasoning of these models to automate penetration testing workflows, operating directly on your command line to make decisions and execute tools to achieve a given objective.
 
 ## How It Works:
 
@@ -25,10 +25,14 @@ source pentest_framework/bin/activate
 ```sh
 pip install requests
 ```
-
+Using Ollama:
+```sh
+python3 opa.py --target "testphp.vulnweb.com" --objective "verify if this host is alive" --provider "ollama" --model "qwen3:1.7b"
+```
+Using Openrouter:
 ```sh
 export OPENROUTER_API_KEY=YOUR_KEY
 ```
 ```sh
-python3 AI_AGENT.py --target "example.com" --objective "Identify and exploit any reflected XSS"
+python3 AI_AGENT.py --target "example.com" --objective "Identify and exploit any reflected XSS" --model "deepseek/deepseek-chat-v3.1"
 ```
