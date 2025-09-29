@@ -12,6 +12,16 @@ It operates on a simple yet powerful **Think → Act → Observe** loop:
 
 **Observe:** The agent captures the full output of the command and sends it back to the LLM as context for the next "Think" cycle. This allows the agent to learn from its actions, handle errors, and chain commands together intelligently.
 
+### PARAMETERS:
+
+**--target**: Defines the primary target   
+
+**--objective**: Specifies the ultimate goal or the specific task the AI agent must achieve regarding the target.  
+
+**--provider**: Sets the AI provider to use. The only supported value is ollama. If this argument is omitted, the agent defaults to openrouter.  
+
+**--model**: Specifies the exact language model to be used by the selected provider (e.g., llama3, gpt-4o).  
+
 ## STEPS TO RUN - Always run this tool in Kali Linux VM for best results:
 
 ```sh
