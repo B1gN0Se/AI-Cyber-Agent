@@ -35,11 +35,16 @@ source pentest_framework/bin/activate
 ```sh
 pip install requests
 ```
-Using Ollama:
+**Using Ollama:**
+
+Download any model you want and run the python script
+```sh
+ollama pull qwen3:1.7b
+```
 ```sh
 python3 opa.py --target "testphp.vulnweb.com" --objective "verify if this host is alive" --provider "ollama" --model "qwen3:1.7b"
 ```
-Using Openrouter:
+**Using Openrouter:**
 ```sh
 export OPENROUTER_API_KEY=YOUR_KEY
 ```
