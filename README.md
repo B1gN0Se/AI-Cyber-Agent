@@ -18,7 +18,7 @@ It operates on a simple yet powerful **Think → Act → Observe** loop:
 
 **--objective**: Specifies the ultimate goal or the specific task the AI agent must achieve regarding the target.  
 
-**--provider**: Sets the AI provider to use. The only supported value is ollama. If this argument is omitted, the agent defaults to openrouter.  
+**--provider**: Sets the AI provider to use. If this argument is omitted, the agent defaults to openrouter.  
 
 **--model**: Specifies the exact language model to be used by the selected provider (e.g., llama3, gpt-4o).  
 
