@@ -22,6 +22,8 @@ It operates on a simple yet powerful **Think → Act → Observe** loop:
 
 **--model**: Specifies the exact language model to be used by the selected provider (e.g., llama3, gpt-4o).  
 
+**-o**: The user can specify a name to save the tool’s execution as output.  
+
 ## STEPS TO RUN - Always run this tool in Kali Linux VM for best results:
 
 ```sh
@@ -42,12 +44,12 @@ Download any model you want and run the python script
 ollama pull qwen3:1.7b
 ```
 ```sh
-python3 opa.py --target "testphp.vulnweb.com" --objective "verify if this host is alive" --provider "ollama" --model "qwen3:1.7b"
+python3 opa.py --target "testphp.vulnweb.com" --objective "verify if this host is alive" --provider "ollama" --model "qwen3:1.7b -o host_alive.txt"
 ```
 **Using Openrouter:**
 ```sh
 export OPENROUTER_API_KEY=YOUR_KEY
 ```
 ```sh
-python3 AI_AGENT.py --target "example.com" --objective "Identify and exploit any reflected XSS" --model "deepseek/deepseek-chat-v3.1"
+python3 AI_AGENT.py --target "example.com" --objective "Identify and exploit any reflected XSS" --model "deepseek/deepseek-chat-v3.1 -o xss.txt" 
 ```
