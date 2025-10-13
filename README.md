@@ -44,12 +44,12 @@ Download any model you want and run the python script
 ollama pull qwen3:1.7b
 ```
 ```sh
-python3 opa.py --target "testphp.vulnweb.com" --objective "verify if this host is alive" --provider "ollama" --model "qwen3:1.7b -o host_alive.txt"
+python3 opa.py --target "testphp.vulnweb.com" --objective "verify if this host is alive" --provider "ollama" --model "qwen3:1.7b" -o host_alive.txt
 ```
 **Using Openrouter:**
 ```sh
 export OPENROUTER_API_KEY=YOUR_KEY
 ```
 ```sh
-python3 AI_AGENT.py --target "example.com" --objective "Identify and exploit any reflected XSS" --model "deepseek/deepseek-chat-v3.1 -o xss.txt" 
+python3 AI_AGENT.py --target "example.com" --objective "Identify and exploit any reflected XSS" --model "deepseek/deepseek-chat-v3.1" -o xss.txt
 ```
