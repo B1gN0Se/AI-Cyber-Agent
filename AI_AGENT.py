@@ -6,6 +6,29 @@ import subprocess
 import sys
 import time
 
+# --- NEW: Tee class to redirect stdout/stderr to multiple streams ---
+class Tee:
+    """A helper class to redirect output to multiple file-like objects (e.g., terminal and a file)."""
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, obj):
+        for f in self.files:
+            try:
+                f.write(obj)
+                f.flush()  # Ensure output is written immediately
+            except IOError:
+                # Handle cases where one of the streams might be closed
+                pass
+
+    def flush(self):
+        for f in self.files:
+            try:
+                f.flush()
+            except IOError:
+                pass
+
+
 # --- Color management class for the terminal ---
 class Colors:
     RESET = '\033[0m'
@@ -307,6 +330,12 @@ if __name__ == "__main__":
     parser.add_argument("--target", required=True, help="The mission's target.")
     parser.add_argument("--objective", required=True, help="The mission's objective.")
     
+    # --- NEW: Added -o/--output argument ---
+    parser.add_argument(
+        "-o", "--output",
+        help="File to save the entire session log to."
+    )
+
     parser.add_argument(
         "--provider", 
         choices=['openrouter', 'ollama'], 
@@ -324,15 +353,32 @@ if __name__ == "__main__":
     )
     
     args = parser.parse_args()
-    
-    api_key = None
-    if args.provider == 'openrouter':
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            print(f"{Colors.RED}[!] Error: For the 'openrouter' provider, the 'OPENROUTER_API_KEY' environment variable is not set.{Colors.RESET}")
-            sys.exit(1)
 
+    # --- NEW: Setup logging to file if --output is provided ---
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    log_file = None
+
+    if args.output:
+        try:
+            log_file = open(args.output, 'w', encoding='utf-8', errors='ignore')
+            # Redirect both stdout and stderr to the Tee object
+            tee = Tee(original_stdout, log_file)
+            sys.stdout = tee
+            sys.stderr = tee
+            print(f"[{Colors.CYAN}*{Colors.RESET}] Logging all output to '{args.output}'")
+        except IOError as e:
+            # If we can't open the file, print to the original stderr and exit
+            original_stderr.write(f"{Colors.RED}[!] Error: Could not open output file '{args.output}': {e}{Colors.RESET}\n")
+            sys.exit(1)
+    
     try:
+        api_key = None
+        if args.provider == 'openrouter':
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                raise ValueError("For the 'openrouter' provider, the 'OPENROUTER_API_KEY' environment variable is not set.")
+
         agent = AIAgent(
             target=args.target, 
             objective=args.objective, 
@@ -348,3 +394,11 @@ if __name__ == "__main__":
         print(f"\n{Colors.RED}[!] Configuration Error: {e}{Colors.RESET}")
     except Exception as e:
         print(f"\n{Colors.RED}[!!!] A fatal application error occurred: {e}{Colors.RESET}")
+    finally:
+        # --- NEW: Cleanup block to ensure the log file is closed and streams are restored ---
+        if log_file:
+            print(f"\n[{Colors.CYAN}*{Colors.RESET}] Session log saved to '{args.output}'")
+            log_file.close()
+            # Restore original stdout and stderr
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
